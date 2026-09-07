@@ -1,0 +1,6 @@
+{
+  "name": "texas-poker-shared",
+  "version": "1.0.0",
+  "main": "types.ts",
+  "private": true
+}
