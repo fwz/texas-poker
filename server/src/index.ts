@@ -38,6 +38,16 @@ io.on('connection', (socket: AppSocket) => {
     callback(manager.listRooms());
   });
 
+  socket.on('leave_room', () => {
+    const result = manager.leaveRoom(socket.id);
+    if (result) {
+      const { roomCode, playerId } = result;
+      socket.leave(roomCode);
+      io.to(roomCode).emit('player_disconnected', { playerId });
+      try { broadcastRoomState(roomCode); } catch { /* room may be empty */ }
+    }
+  });
+
   socket.on('create_room', (payload, callback) => {
     try {
       const options = { ...payload.options, turnTimeLimit: payload.options.turnTimeLimit ?? 10 };

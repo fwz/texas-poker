@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ActionBar } from '../components/ActionBar';
 import { HandHistory } from '../components/HandHistory';
 import { Table } from '../components/Table';
-import { getSocket, useSocketEvent } from '../hooks/useSocket';
+import { getSocket, resetSocket, useSocketEvent } from '../hooks/useSocket';
 import { playSound } from '../hooks/useSound';
 import { useGameStore } from '../store/gameStore';
 import type { HandHistoryEntry } from '../../../shared/types';
@@ -61,7 +61,7 @@ export function Game() {
     if (eliminatedId === playerId) {
       setEliminatedMsg('记分牌已用完，你已离开牌局');
       setTimeout(() => {
-        getSocket().disconnect();
+        resetSocket();
         reset();
         navigate('/');
       }, 2500);
@@ -124,7 +124,9 @@ export function Game() {
   const inviteUrl = `${window.location.origin}/?room=${roomCode}`;
 
   const handleLeave = () => {
-    getSocket().disconnect();
+    // Tell server to remove immediately (no 30-second grace), then tear down socket.
+    getSocket().emit('leave_room');
+    resetSocket();
     reset();
     navigate('/');
   };

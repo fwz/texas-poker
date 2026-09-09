@@ -17,6 +17,14 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
   return socket;
 }
 
+export function resetSocket(): void {
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
+}
+
 export function useSocketEvent<K extends keyof ServerToClientEvents>(
   event: K,
   handler: ServerToClientEvents[K]

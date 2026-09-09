@@ -58,6 +58,20 @@ export class RoomManager {
       .map(room => room.getRoomInfo());
   }
 
+  leaveRoom(socketId: string): { roomCode: string; playerId: string } | null {
+    const roomCode = this.socketToRoom.get(socketId);
+    const room = roomCode ? this.rooms.get(roomCode) : undefined;
+    if (!room) return null;
+
+    const playerId = room.leave(socketId);
+    this.socketToRoom.delete(socketId);
+    this.socketToPlayer.delete(socketId);
+
+    if (room.isEmpty()) this.rooms.delete(roomCode!);
+
+    return playerId ? { roomCode: roomCode!, playerId } : null;
+  }
+
   handleDisconnect(socketId: string): { roomCode: string; playerId: string } | null {
     const roomCode = this.socketToRoom.get(socketId);
     const room = roomCode ? this.rooms.get(roomCode) : undefined;

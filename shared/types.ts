@@ -113,6 +113,7 @@ export interface ClientToServerEvents {
     callback: (res: { playerId: string; gameState: PublicGameState } | { error: string }) => void
   ) => void;
   list_rooms: (callback: (rooms: RoomListEntry[]) => void) => void;
+  leave_room: () => void;
   start_game: (
     callback: (res: { ok: boolean } | { error: string }) => void
   ) => void;

@@ -222,6 +222,34 @@ export class Room {
     return true;
   }
 
+  leave(socketId: string): string | null {
+    const p = this.players.find(rp => rp.socketId === socketId);
+    if (!p) return null;
+
+    // If it's their turn mid-game, fold immediately
+    if (this.engine.phase !== 'waiting' && this.engine.phase !== 'showdown') {
+      const active = this.engine.players[this.engine.activePlayerIndex];
+      if (active?.id === p.id && active.isActive) {
+        try {
+          const prev = this.engine;
+          this.recordAction(p.id, { type: 'fold' }, prev);
+          this.engine = applyAction(this.engine, p.id, { type: 'fold' });
+          this.maybeRestartTimer(prev);
+          if (this.engine.phase === 'showdown') this.finalizeHandLog();
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Remove immediately (no grace period)
+    this.engine = removePlayer(this.engine, p.id);
+    this.players = this.players.filter(rp => rp.id !== p.id);
+    if (this.hostId === p.id && this.players.length > 0) {
+      this.hostId = this.players[0].id;
+    }
+
+    return p.id;
+  }
+
   handleDisconnect(socketId: string): string | null {
     const p = this.players.find(rp => rp.socketId === socketId);
     if (!p) return null;
