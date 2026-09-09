@@ -76,6 +76,7 @@ export function Home() {
       if ('error' in res) return setError(res.error);
       setPlayerId(res.playerId);
       setRoomCode(res.roomCode);
+      setGameState(res.gameState);
       navigate('/game');
     });
   };

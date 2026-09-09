@@ -53,10 +53,12 @@ io.on('connection', (socket: AppSocket) => {
       const options = { ...payload.options, turnTimeLimit: payload.options.turnTimeLimit ?? 10 };
       const { roomCode, playerId } = manager.createRoom(socket.id, payload.playerName, payload.avatar ?? '🐼', options);
       socket.join(roomCode);
-      manager.getRoom(roomCode).onBroadcastNeeded = () => {
+      const room = manager.getRoom(roomCode);
+      room.onBroadcastNeeded = () => {
         try { broadcastRoomState(roomCode); } catch { /* room gone */ }
       };
-      callback({ roomCode, playerId });
+      const gameState = room.getStateFor(playerId);
+      callback({ roomCode, playerId, gameState });
       broadcastRoomState(roomCode);
     } catch (e: any) {
       callback({ error: e.message });

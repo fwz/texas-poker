@@ -106,7 +106,7 @@ export interface RoomOptions {
 export interface ClientToServerEvents {
   create_room: (
     payload: { playerName: string; avatar: string; options: RoomOptions },
-    callback: (res: { roomCode: string; playerId: string } | { error: string }) => void
+    callback: (res: { roomCode: string; playerId: string; gameState: PublicGameState } | { error: string }) => void
   ) => void;
   join_room: (
     payload: { roomCode: string; playerName: string; avatar: string },
