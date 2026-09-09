@@ -92,7 +92,10 @@ export function ActionBar({ state, playerId }: Props) {
   const isUrgent = timeLeft > 0 && timeLeft <= 5;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur border-t border-gray-700 px-3 pt-2 pb-3">
+    <div
+      className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 px-3 pt-2"
+      style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+    >
       {/* Raise panel */}
       {showRaise && canRaise && (
         <>

@@ -78,7 +78,7 @@ io.on('connection', (socket: AppSocket) => {
 
   socket.on('create_room', (payload, callback) => {
     try {
-      const options = { ...payload.options, turnTimeLimit: payload.options.turnTimeLimit ?? 10 };
+      const options = { ...payload.options, turnTimeLimit: payload.options.turnTimeLimit ?? 20 };
       const { roomCode, playerId } = manager.createRoom(socket.id, payload.playerName, payload.avatar ?? '🐼', options);
       socket.join(roomCode);
       const room = manager.getRoom(roomCode);

@@ -101,7 +101,7 @@ export function Table({ state, playerId, showStats = false, statsMap }: Props) {
     // Height adapts: 148% of width by default, capped at viewport height minus header/footer
     <div
       className="relative w-full mx-auto"
-      style={{ paddingBottom: 'min(148%, calc(100vh - 220px))' }}
+      style={{ paddingBottom: 'min(148%, calc(100dvh - 220px))' }}
     >
       {/* Wood outer ring */}
       <div

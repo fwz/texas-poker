@@ -9,7 +9,7 @@ const DEFAULT_OPTIONS: RoomOptions = {
   smallBlind: 5,
   bigBlind: 10,
   maxPlayers: 9,
-  turnTimeLimit: 10,
+  turnTimeLimit: 20,
 };
 
 const AVATARS = [
@@ -99,7 +99,7 @@ export function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-5">
+    <div className="flex flex-col items-center justify-center p-4 gap-5" style={{ minHeight: '100dvh' }}>
       <h1 className="text-3xl font-bold text-yellow-400">Texas Family Pot</h1>
       <p className="text-xs text-gray-500 -mt-3">计分牌仅供娱乐 - 勿用于赌博</p>
 

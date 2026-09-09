@@ -165,8 +165,11 @@ export function Game() {
     );
   }
 
+  // pb accounts for the fixed ActionBar; 0 during waiting/showdown so the start button is always reachable
+  const bottomPad = !isWaiting && !isShowdown ? '13rem' : '0';
+
   return (
-    <div className="min-h-screen flex flex-col pb-36">
+    <div className="flex flex-col" style={{ minHeight: '100dvh', paddingBottom: bottomPad }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-800">
         <button onClick={handleLeave} className="text-gray-400 text-sm min-h-[44px] min-w-[44px]">

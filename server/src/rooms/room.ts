@@ -49,7 +49,7 @@ export class Room {
 
   private startTurnTimer(): void {
     clearTimeout(this.turnTimer);
-    const limitMs = (this.options.turnTimeLimit ?? 10) * 1000;
+    const limitMs = (this.options.turnTimeLimit ?? 20) * 1000;
     this.turnDeadline = Date.now() + limitMs;
     this.turnTimer = setTimeout(() => this.handleTurnTimeout(), limitMs);
   }
