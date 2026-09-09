@@ -16,3 +16,4 @@ server.pid
 *.swp
 *.swo
 .DS_Store
+.vercel
