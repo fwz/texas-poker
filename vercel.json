@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm install && npm run build --workspace=client",
+  "buildCommand": "npm run build --workspace=client",
   "outputDirectory": "client/dist",
-  "installCommand": "echo 'install handled in buildCommand'",
+  "installCommand": "npm install --force",
   "framework": null
 }
