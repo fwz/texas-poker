@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build --workspace=client",
+  "buildCommand": "rm -f package-lock.json && npm install && npm run build --workspace=client",
   "outputDirectory": "client/dist",
-  "installCommand": "npm install --force",
+  "installCommand": "echo skip",
   "framework": null
 }
