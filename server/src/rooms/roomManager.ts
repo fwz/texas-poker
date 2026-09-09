@@ -54,7 +54,7 @@ export class RoomManager {
 
   listRooms(): RoomListEntry[] {
     return Array.from(this.rooms.values())
-      .filter(room => !room.isEmpty() && room.players.length < room.options.maxPlayers)
+      .filter(room => !room.isEmpty() && room.players.length < room.options.maxPlayers && room.getRoomInfo().phase === 'waiting')
       .map(room => room.getRoomInfo());
   }
 
