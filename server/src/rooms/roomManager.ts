@@ -87,4 +87,34 @@ export class RoomManager {
 
     return playerId ? { roomCode: roomCode!, playerId } : null;
   }
+
+  leaveByPlayerId(playerId: string, roomCode: string): { roomCode: string; playerId: string } | null {
+    const room = this.rooms.get(roomCode.toUpperCase());
+    if (!room) return null;
+
+    const rp = room.players.find(p => p.id === playerId);
+    if (!rp) return null;
+
+    const socketId = rp.socketId;
+    const left = room.leave(socketId);
+    this.socketToRoom.delete(socketId);
+    this.socketToPlayer.delete(socketId);
+
+    if (room.isEmpty()) this.rooms.delete(roomCode.toUpperCase());
+
+    return left ? { roomCode: roomCode.toUpperCase(), playerId: left } : null;
+  }
+
+  clearAllRooms(): Array<{ socketId: string; playerId: string }> {
+    const affected: Array<{ socketId: string; playerId: string }> = [];
+    for (const room of this.rooms.values()) {
+      for (const rp of room.players) {
+        affected.push({ socketId: rp.socketId, playerId: rp.id });
+      }
+    }
+    this.rooms.clear();
+    this.socketToRoom.clear();
+    this.socketToPlayer.clear();
+    return affected;
+  }
 }

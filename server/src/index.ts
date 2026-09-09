@@ -14,6 +14,34 @@ app.use(express.json());
 // Health check for Railway / uptime monitors
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Called via sendBeacon when player closes the browser tab
+app.post('/api/leave', (req, res) => {
+  const { playerId, roomCode } = req.query as { playerId?: string; roomCode?: string };
+  if (!playerId || !roomCode) return res.status(400).json({ error: 'missing params' });
+  const result = manager.leaveByPlayerId(playerId, roomCode);
+  if (result) {
+    io.to(result.roomCode).emit('player_disconnected', { playerId: result.playerId });
+    try {
+      const room = manager.getRoom(result.roomCode);
+      for (const rp of room.players) {
+        const s = io.sockets.sockets.get(rp.socketId);
+        if (s) s.emit('game_state_update', room.getStateFor(rp.id));
+      }
+    } catch { /* room may now be empty */ }
+  }
+  return res.json({ ok: true });
+});
+
+// Admin: clear all rooms and kick everyone back to Home
+app.post('/api/admin/clear', (_req, res) => {
+  const affected = manager.clearAllRooms();
+  for (const { socketId, playerId } of affected) {
+    const s = io.sockets.sockets.get(socketId);
+    if (s) s.emit('player_eliminated', { playerId });
+  }
+  return res.json({ ok: true, cleared: affected.length });
+});
+
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },

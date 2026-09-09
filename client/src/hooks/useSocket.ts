@@ -5,7 +5,7 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../../../shared
 
 // Dev: connect to separate Vite dev server's backend (localhost:3001).
 // Prod: connect to the same origin (Express serves both static files and socket.io).
-const SERVER_URL = import.meta.env.VITE_SERVER_URL
+export const SERVER_URL = import.meta.env.VITE_SERVER_URL
   ?? (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;

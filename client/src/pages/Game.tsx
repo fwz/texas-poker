@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ActionBar } from '../components/ActionBar';
 import { HandHistory } from '../components/HandHistory';
 import { Table } from '../components/Table';
-import { getSocket, resetSocket, useSocketEvent } from '../hooks/useSocket';
+import { getSocket, resetSocket, SERVER_URL, useSocketEvent } from '../hooks/useSocket';
 import { playSound } from '../hooks/useSound';
 import { useGameStore } from '../store/gameStore';
 import type { HandHistoryEntry } from '../../../shared/types';
@@ -50,6 +50,17 @@ export function Game() {
   useEffect(() => {
     if (!playerId || !roomCode) navigate('/');
   }, [playerId, roomCode, navigate]);
+
+  // On true browser close/refresh, fire-and-forget leave via sendBeacon.
+  // This does NOT trigger on React Router navigations (those use handleLeave).
+  useEffect(() => {
+    if (!playerId || !roomCode) return;
+    const handleBeforeUnload = () => {
+      navigator.sendBeacon(`${SERVER_URL}/api/leave?playerId=${encodeURIComponent(playerId)}&roomCode=${encodeURIComponent(roomCode)}`);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [playerId, roomCode]);
 
   useSocketEvent('game_state_update', (state) => {
     setGameState(state);
