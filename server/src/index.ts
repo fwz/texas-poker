@@ -11,6 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check for Railway / uptime monitors
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
