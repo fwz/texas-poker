@@ -228,7 +228,7 @@ export function ActionBar({ state, playerId, onExpandChange }: Props) {
               className="w-full py-3 rounded-xl bg-green-600 active:bg-green-800 text-white font-bold text-sm"
               style={{ boxShadow: '0 2px 8px rgba(22,163,74,0.4)' }}
             >
-              加注 {raiseAmount}
+              {canCheck ? '下注' : '加注'} {raiseAmount}
             </button>
           </div>
         </div>
