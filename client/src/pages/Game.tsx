@@ -42,6 +42,7 @@ export function Game() {
   const [eliminatedMsg, setEliminatedMsg] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [raiseExpanded, setRaiseExpanded] = useState(false);
 
   const prevPhaseRef = useRef('');
   const prevActiveRef = useRef<string | null>(null);
@@ -165,11 +166,11 @@ export function Game() {
     );
   }
 
-  // pb accounts for the fixed ActionBar; 0 during waiting/showdown so the start button is always reachable
-  const bottomPad = !isWaiting && !isShowdown ? '13rem' : '0';
+  // pb clears the fixed ActionBar; expands when raise panel is open
+  const actionBarHeight = !isWaiting && !isShowdown ? (raiseExpanded ? '14rem' : '9rem') : '0';
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '100dvh', paddingBottom: bottomPad }}>
+    <div className="flex flex-col" style={{ minHeight: '100dvh', paddingBottom: actionBarHeight }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-800">
         <button onClick={handleLeave} className="text-gray-400 text-sm min-h-[44px] min-w-[44px]">
@@ -229,6 +230,7 @@ export function Game() {
           playerId={playerId}
           showStats={showStats}
           statsMap={statsMap}
+          actionBarHeight={actionBarHeight}
         />
       </div>
 
@@ -291,6 +293,7 @@ export function Game() {
           key={`${gameState.round}-${gameState.activePlayerId}`}
           state={gameState}
           playerId={playerId}
+          onExpandChange={setRaiseExpanded}
         />
       )}
 

@@ -7,6 +7,7 @@ interface Props {
   playerId: string;
   showStats?: boolean;
   statsMap?: Map<string, { vpip: number; pfr: number; hands: number }>;
+  actionBarHeight?: string;
 }
 
 // Portrait oval — me at bottom center, distribute opponents symmetrically
@@ -76,7 +77,7 @@ function getSeatPositions(count: number): [number, number][] {
   }
 }
 
-export function Table({ state, playerId, showStats = false, statsMap }: Props) {
+export function Table({ state, playerId, showStats = false, statsMap, actionBarHeight = '9rem' }: Props) {
   const { players, communityCards, pot, phase, winners } = state;
   const isShowdown = phase === 'showdown';
   const winnerIds = new Set(winners?.map(w => w.playerId) ?? []);
@@ -98,10 +99,9 @@ export function Table({ state, playerId, showStats = false, statsMap }: Props) {
   const positions = getSeatPositions(rotated.length);
 
   return (
-    // Height adapts: 148% of width by default, capped at viewport height minus header/footer
     <div
       className="relative w-full mx-auto"
-      style={{ paddingBottom: 'min(148%, calc(100dvh - 220px))' }}
+      style={{ height: `min(148vw, calc(100dvh - 70px - ${actionBarHeight}))` }}
     >
       {/* Wood outer ring */}
       <div

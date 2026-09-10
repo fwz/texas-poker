@@ -13,12 +13,13 @@ interface Props {
   card: CardType | null;
   faceDown?: boolean;
   small?: boolean;
+  mini?: boolean;
   highlighted?: boolean;
   tilt?: number;
 }
 
-export function Card({ card, faceDown = false, small = false, highlighted = false, tilt }: Props) {
-  const w = small ? 'w-11 h-16' : 'w-9 h-[52px]';
+export function Card({ card, faceDown = false, small = false, mini = false, highlighted = false, tilt }: Props) {
+  const w = mini ? 'w-7 h-10' : small ? 'w-11 h-16' : 'w-9 h-[52px]';
   const glow = highlighted
     ? 'ring-2 ring-yellow-400 shadow-lg shadow-yellow-400/60 border-yellow-300'
     : 'border-gray-300';
@@ -46,12 +47,10 @@ export function Card({ card, faceDown = false, small = false, highlighted = fals
   const color = red ? 'text-red-600' : 'text-gray-900';
   return (
     <div className={`${base} bg-white ${color}`} style={style}>
-      {/* Top-left: rank */}
-      <div className={`absolute top-0.5 left-1 font-bold leading-none ${small ? 'text-2xl' : 'text-lg'}`}>
+      <div className={`absolute top-0.5 left-1 font-bold leading-none ${mini ? 'text-sm' : small ? 'text-2xl' : 'text-lg'}`}>
         {card.rank}
       </div>
-      {/* Bottom-right: suit */}
-      <div className={`absolute bottom-0.5 right-1 font-bold leading-none ${small ? 'text-3xl' : 'text-xl'}`}>
+      <div className={`absolute bottom-0.5 right-1 font-bold leading-none ${mini ? 'text-base' : small ? 'text-3xl' : 'text-xl'}`}>
         {SUIT_SYMBOL[card.suit]}
       </div>
     </div>
