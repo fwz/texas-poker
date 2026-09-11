@@ -99,10 +99,23 @@ export function startRound(state: GameEngineState): GameEngineState {
 
   const eligible = s.players.filter(p => p.isConnected && p.chips > 0);
 
-  // Advance dealer
-  s.dealerIndex = (s.dealerIndex + 1) % eligible.length;
-  const sbIndex = (s.dealerIndex + 1) % eligible.length;
-  const bbIndex = (s.dealerIndex + 2) % eligible.length;
+  // Advance the dealer among eligible players, then convert back to an index in
+  // the canonical players array.  Mixing these two index spaces breaks after a
+  // player disconnects or is removed.
+  const previousDealerId = s.players[s.dealerIndex]?.id;
+  const previousDealerEligibleIndex = eligible.findIndex(p => p.id === previousDealerId);
+  const dealerEligibleIndex = (previousDealerEligibleIndex + 1 + eligible.length) % eligible.length;
+  const dealerId = eligible[dealerEligibleIndex].id;
+  s.dealerIndex = s.players.findIndex(p => p.id === dealerId);
+
+  // Heads-up is the one exception: the button posts the small blind and acts
+  // first preflop.  In every other game the blinds are left of the button.
+  const sbIndex = eligible.length === 2
+    ? dealerEligibleIndex
+    : (dealerEligibleIndex + 1) % eligible.length;
+  const bbIndex = eligible.length === 2
+    ? (dealerEligibleIndex + 1) % eligible.length
+    : (dealerEligibleIndex + 2) % eligible.length;
 
   s.players = s.players.map(p => ({
     ...p,
@@ -126,9 +139,13 @@ export function startRound(state: GameEngineState): GameEngineState {
 
   s.phase = 'preflop';
 
-  // Action starts left of big blind
-  const utg = (bbIndex + 1) % eligible.length;
+  // In heads-up the button/small blind acts first preflop; otherwise action
+  // starts left of the big blind.
+  const utg = eligible.length === 2
+    ? dealerEligibleIndex
+    : (bbIndex + 1) % eligible.length;
   s.activePlayerIndex = s.players.findIndex(p => p.id === eligible[utg].id);
+  s.sidePots = buildSidePots(s);
 
   return s;
 }
@@ -149,6 +166,12 @@ export function applyAction(state: GameEngineState, playerId: string, action: Pl
   let s = { ...state, players: state.players.map(p => ({ ...p })) };
   const player = s.players.find(p => p.id === playerId);
 
+  if (!['preflop', 'flop', 'turn', 'river'].includes(s.phase)) {
+    throw new Error('No action is allowed in the current phase');
+  }
+  if (!action || typeof action !== 'object' || !['fold', 'check', 'call', 'raise'].includes(action.type)) {
+    throw new Error('Invalid player action');
+  }
   if (!player) throw new Error('Player not found');
   if (s.players[s.activePlayerIndex]?.id !== playerId) throw new Error('Not your turn');
   if (!player.isActive) throw new Error('You are not active in this hand');
@@ -172,10 +195,20 @@ export function applyAction(state: GameEngineState, playerId: string, action: Pl
     }
 
     case 'raise': {
+      if (!Number.isSafeInteger(action.amount) || action.amount <= 0) {
+        throw new Error('Raise amount must be a positive whole number');
+      }
       const minTotal = s.currentBet + s.minRaise;
-      const isAllInShort = player.chips + player.bet <= action.amount;
+      const maxTotal = player.chips + player.bet;
+      if (action.amount > maxTotal) throw new Error('Raise exceeds available chips');
+      if (action.amount <= s.currentBet) throw new Error('Raise must exceed the current bet');
+
+      const isAllInShort = action.amount === maxTotal;
       if (action.amount < minTotal && !isAllInShort) {
         throw new Error(`Minimum raise to ${minTotal}`);
+      }
+      if (player.hasActedThisRound) {
+        throw new Error('Betting is not reopened after an incomplete all-in raise');
       }
       const raiseBy = action.amount - player.bet;
       const isFullRaise = action.amount >= minTotal;
@@ -196,8 +229,32 @@ export function applyAction(state: GameEngineState, playerId: string, action: Pl
     }
   }
 
+  s.sidePots = buildSidePots(s);
   s = advanceTurn(s);
   return s;
+}
+
+/**
+ * Derive side pots from each player's total contribution for this hand. Folded
+ * players fund pots but are never eligible to win them.
+ */
+function buildSidePots(state: GameEngineState): SidePot[] {
+  const levels = [...new Set(
+    state.players
+      .map(player => player.totalBetThisRound)
+      .filter(amount => amount > 0)
+  )].sort((a, b) => a - b);
+
+  let previousLevel = 0;
+  return levels.map(level => {
+    const contributors = state.players.filter(player => player.totalBetThisRound >= level);
+    const pot: SidePot = {
+      amount: (level - previousLevel) * contributors.length,
+      eligiblePlayerIds: contributors.filter(player => player.isActive).map(player => player.id),
+    };
+    previousLevel = level;
+    return pot;
+  }).filter(pot => pot.amount > 0);
 }
 
 function activePlayers(state: GameEngineState): PlayerState[] {
@@ -269,8 +326,19 @@ function advancePhase(state: GameEngineState): GameEngineState {
   if (canAct.length === 0) {
     return advancePhase(s);
   }
-  s.activePlayerIndex = s.players.indexOf(canAct[0]);
+  // Every postflop street starts with the first actionable seat left of the
+  // button, not with whichever player happens to be first in the array.
+  s.activePlayerIndex = firstActionableAfter(s, s.dealerIndex);
   return s;
+}
+
+function firstActionableAfter(state: GameEngineState, seatIndex: number): number {
+  for (let offset = 1; offset <= state.players.length; offset++) {
+    const index = (seatIndex + offset) % state.players.length;
+    const player = state.players[index];
+    if (player.isActive && !player.isAllIn) return index;
+  }
+  throw new Error('No actionable player found');
 }
 
 function resolveWinner(state: GameEngineState): GameEngineState {
@@ -285,29 +353,45 @@ function resolveWinner(state: GameEngineState): GameEngineState {
 
 function resolveShowdown(state: GameEngineState): GameEngineState {
   const s = { ...state, players: state.players.map(p => ({ ...p })) };
-  const activePlayers = s.players.filter(p => p.isActive);
+  s.sidePots = buildSidePots(s);
+  const payouts = new Map<string, { amount: number; handName: string; bestCards: Card[] }>();
 
-  const results = pickWinners(
-    activePlayers.map(p => ({ playerId: p.id, holeCards: p.holeCards })),
-    s.communityCards
-  );
+  for (const sidePot of s.sidePots) {
+    const contenders = s.players.filter(player => sidePot.eligiblePlayerIds.includes(player.id));
+    if (contenders.length === 0) throw new Error('Side pot has no eligible players');
+    const results = pickWinners(
+      contenders.map(player => ({ playerId: player.id, holeCards: player.holeCards })),
+      s.communityCards,
+    );
+    const perWinner = Math.floor(sidePot.amount / results.length);
+    let remainder = sidePot.amount % results.length;
+    const winnersInOddChipOrder = [...results].sort((a, b) => oddChipOrder(s, a.playerId) - oddChipOrder(s, b.playerId));
 
-  const perWinner = Math.floor(s.pot / results.length);
-  const remainder = s.pot - perWinner * results.length;
+    for (const result of winnersInOddChipOrder) {
+      const amount = perWinner + (remainder-- > 0 ? 1 : 0);
+      const payout = payouts.get(result.playerId) ?? {
+        amount: 0,
+        handName: result.handName,
+        bestCards: result.bestCards,
+      };
+      payout.amount += amount;
+      payouts.set(result.playerId, payout);
+    }
+  }
 
-  s.winners = results.map((r, i) => ({
-    playerId: r.playerId,
-    amount: perWinner + (i === 0 ? remainder : 0),
-    handName: r.handName,
-    bestCards: r.bestCards,
-  }));
-
-  for (const w of s.winners) {
-    s.players.find(p => p.id === w.playerId)!.chips += w.amount;
+  s.winners = [...payouts.entries()].map(([playerId, payout]) => ({ playerId, ...payout }));
+  for (const winner of s.winners) {
+    s.players.find(player => player.id === winner.playerId)!.chips += winner.amount;
   }
 
   s.pot = 0;
   return s;
+}
+
+function oddChipOrder(state: GameEngineState, playerId: string): number {
+  const index = state.players.findIndex(player => player.id === playerId);
+  // Odd chips are assigned clockwise from the first occupied seat left of the button.
+  return (index - state.dealerIndex - 1 + state.players.length) % state.players.length;
 }
 
 const POSITION_NAMES: Record<number, string[]> = {
@@ -344,10 +428,14 @@ export function toPublicState(
   });
 
   const sbIdx = eligible.length > 0
-    ? state.players.indexOf(eligible[(dealerEligIdx + 1) % eligible.length])
+    ? state.players.indexOf(eligible[eligible.length === 2 ? dealerEligIdx : (dealerEligIdx + 1) % eligible.length])
     : -1;
   const bbIdx = eligible.length > 0
-    ? state.players.indexOf(eligible[(dealerEligIdx + 2) % eligible.length])
+    ? state.players.indexOf(eligible[
+      eligible.length === 2
+        ? (dealerEligIdx + 1) % eligible.length
+        : (dealerEligIdx + 2) % eligible.length
+    ])
     : -1;
 
   const players: PublicPlayer[] = state.players.map((p, i) => {
@@ -391,5 +479,6 @@ export function toPublicState(
     hostId,
     winners: state.winners,
     history: [], // populated by Room.getStateFor
+    revision: 0, // populated by Room.getStateFor
   };
 }

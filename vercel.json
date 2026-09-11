@@ -1,5 +1,5 @@
 {
-  "buildCommand": "rm -f package-lock.json && npm install && npm run build --workspace=client",
+  "buildCommand": "npm ci && npm run build --workspace=client",
   "outputDirectory": "client/dist",
   "installCommand": "echo skip",
   "framework": null

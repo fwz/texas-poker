@@ -1,6 +1,6 @@
 import {
-  HandActionRecord, HandHistoryEntry, HandPlayerRecord,
-  PlayerAction, PublicGameState, RoomListEntry, RoomOptions,
+  GameStatePatch, HandActionRecord, HandHistoryEntry, HandPlayerRecord,
+  PlayerAction, PublicGameState, PublicPlayer, RoomListEntry, RoomOptions,
 } from '../../../shared/types';
 import {
   addPlayer, applyAction, createEngine, GameEngineState,
@@ -39,6 +39,8 @@ export class Room {
   private turnDeadline?: number;
   private history: HandHistoryEntry[] = [];
   private currentHandLog: HandLog | null = null;
+  private revision = 0;
+  private lastPublishedStates = new Map<string, PublicGameState>();
 
   constructor(code: string, hostId: string, options: RoomOptions) {
     this.code = code;
@@ -362,7 +364,32 @@ export class Room {
     const state = toPublicState(this.engine, playerId, this.code, this.hostId);
     state.turnDeadline = this.turnDeadline;
     state.history = this.history;
+    state.revision = this.revision;
     return state;
+  }
+
+  /** Records a full snapshot sent through a request/response callback as a patch baseline. */
+  acknowledgeSnapshot(playerId: string): void {
+    this.lastPublishedStates.set(playerId, this.getStateFor(playerId));
+  }
+
+  /**
+   * Build one recipient-specific patch per connected socket.  Hole cards differ
+   * per recipient, so a room-wide shared patch would violate card privacy.
+   */
+  getStatePatches(): Array<{ socketId: string; patch: GameStatePatch }> {
+    this.revision += 1;
+    return this.players.map(player => {
+      const current = this.getStateFor(player.id);
+      const previous = this.lastPublishedStates.get(player.id);
+      const patch = createStatePatch(previous, current);
+      this.lastPublishedStates.set(player.id, current);
+      return { socketId: player.socketId, patch };
+    });
+  }
+
+  getHistoryEntry(round: number): HandHistoryEntry | undefined {
+    return this.history.find(entry => entry.round === round);
   }
 
   getPlayerIdBySocket(socketId: string): string | undefined {
@@ -381,4 +408,47 @@ export class Room {
       phase: this.engine.phase,
     };
   }
+}
+
+function createStatePatch(previous: PublicGameState | undefined, current: PublicGameState): GameStatePatch {
+  const changes: GameStatePatch['changes'] = {};
+  const fields: Array<Exclude<keyof PublicGameState, 'players' | 'history' | 'revision'>> = [
+    'phase', 'communityCards', 'pot', 'sidePots', 'currentBet', 'activePlayerId',
+    'myCards', 'blinds', 'round', 'minRaise', 'roomCode', 'hostId', 'winners', 'turnDeadline',
+  ];
+
+  for (const field of fields) {
+    if (!previous || !isEqual(previous[field], current[field])) {
+      (changes as Record<string, unknown>)[field] = current[field];
+    }
+  }
+
+  const previousPlayers = new Map(previous?.players.map(player => [player.id, player]) ?? []);
+  const currentPlayerIds = new Set(current.players.map(player => player.id));
+  const upserts = current.players.flatMap(player => {
+    const before = previousPlayers.get(player.id);
+    if (!before) return [{ id: player.id, changes: player }];
+    const playerChanges = diffPlayer(before, player);
+    return Object.keys(playerChanges).length > 0 ? [{ id: player.id, changes: playerChanges }] : [];
+  });
+  const removedIds = [...previousPlayers.keys()].filter(id => !currentPlayerIds.has(id));
+  if (upserts.length > 0 || removedIds.length > 0) changes.players = { upserts, removedIds };
+
+  return {
+    baseRevision: previous?.revision ?? null,
+    revision: current.revision,
+    changes,
+  };
+}
+
+function diffPlayer(previous: PublicPlayer, current: PublicPlayer): Partial<PublicPlayer> {
+  const changes: Partial<PublicPlayer> = {};
+  for (const field of Object.keys(current) as Array<keyof PublicPlayer>) {
+    if (!isEqual(previous[field], current[field])) changes[field] = current[field] as never;
+  }
+  return changes;
+}
+
+function isEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

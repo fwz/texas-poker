@@ -36,7 +36,10 @@ function computeStats(history: HandHistoryEntry[]) {
 
 export function Game() {
   const navigate = useNavigate();
-  const { playerId, roomCode, gameState, setGameState, reset } = useGameStore();
+  const {
+    playerId, roomCode, gameState, setGameState, applyGamePatch,
+    upsertHistoryEntry, reset,
+  } = useGameStore();
   const [countdown, setCountdown] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [eliminatedMsg, setEliminatedMsg] = useState('');
@@ -47,6 +50,7 @@ export function Game() {
   const prevPhaseRef = useRef('');
   const prevActiveRef = useRef<string | null>(null);
   const prevWinnersKeyRef = useRef('');
+  const fetchedHandRoundRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!playerId || !roomCode) navigate('/');
@@ -63,8 +67,13 @@ export function Game() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [playerId, roomCode]);
 
-  useSocketEvent('game_state_update', (state) => {
-    setGameState(state);
+  useSocketEvent('game_state_update', (patch) => {
+    if (applyGamePatch(patch)) return;
+    // A missed/out-of-order patch must never be merged speculatively. Recover
+    // with one authoritative snapshot from the server instead.
+    getSocket().emit('get_game_state', (result) => {
+      if (!('error' in result)) setGameState(result);
+    });
   });
 
   useSocketEvent('player_disconnected', () => {});
@@ -122,6 +131,17 @@ export function Game() {
     }, 1000);
     return () => clearInterval(id);
   }, [showdownKey]);
+
+  // Normal broadcasts omit history. Once a hand ends, request that single
+  // immutable record so history/stat UI has a complete, compact fallback.
+  useEffect(() => {
+    if (gameState?.phase !== 'showdown' || !gameState.winners?.length) return;
+    if (fetchedHandRoundRef.current === gameState.round) return;
+    fetchedHandRoundRef.current = gameState.round;
+    getSocket().emit('get_hand_history', { round: gameState.round }, (result) => {
+      if (!('error' in result)) upsertHistoryEntry(result.entry);
+    });
+  }, [gameState?.phase, gameState?.round, gameState?.winners, upsertHistoryEntry]);
 
   const statsMap = useMemo(
     () => computeStats(gameState?.history ?? []),

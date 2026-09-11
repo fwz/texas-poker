@@ -4,7 +4,7 @@ import fs from 'fs';
 import { createServer } from 'http';
 import path from 'path';
 import { Server, Socket } from 'socket.io';
-import { ClientToServerEvents, RoomListEntry, ServerToClientEvents } from '../../shared/types';
+import { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 import { RoomManager } from './rooms/roomManager';
 
 const app = express();
@@ -21,13 +21,7 @@ app.post('/api/leave', (req, res) => {
   const result = manager.leaveByPlayerId(playerId, roomCode);
   if (result) {
     io.to(result.roomCode).emit('player_disconnected', { playerId: result.playerId });
-    try {
-      const room = manager.getRoom(result.roomCode);
-      for (const rp of room.players) {
-        const s = io.sockets.sockets.get(rp.socketId);
-        if (s) s.emit('game_state_update', room.getStateFor(rp.id));
-      }
-    } catch { /* room may now be empty */ }
+    try { broadcastRoomState(result.roomCode); } catch { /* room may now be empty */ }
   }
   return res.json({ ok: true });
 });
@@ -53,10 +47,10 @@ type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 function broadcastRoomState(roomCode: string): void {
   const room = manager.getRoom(roomCode);
-  for (const rp of room.players) {
-    const s = io.sockets.sockets.get(rp.socketId);
+  for (const { socketId, patch } of room.getStatePatches()) {
+    const s = io.sockets.sockets.get(socketId);
     if (s) {
-      s.emit('game_state_update', room.getStateFor(rp.id));
+      s.emit('game_state_update', patch);
     }
   }
 }
@@ -64,6 +58,30 @@ function broadcastRoomState(roomCode: string): void {
 io.on('connection', (socket: AppSocket) => {
   socket.on('list_rooms', (callback) => {
     callback(manager.listRooms());
+  });
+
+  socket.on('get_game_state', (callback) => {
+    try {
+      const roomCode = manager.getRoomCodeBySocket(socket.id);
+      const playerId = manager.getPlayerIdBySocket(socket.id);
+      const room = manager.getRoom(roomCode);
+      const state = room.getStateFor(playerId);
+      room.acknowledgeSnapshot(playerId);
+      callback(state);
+    } catch (e: unknown) {
+      callback({ error: e instanceof Error ? e.message : 'Unable to get game state' });
+    }
+  });
+
+  socket.on('get_hand_history', ({ round }, callback) => {
+    try {
+      const roomCode = manager.getRoomCodeBySocket(socket.id);
+      const entry = manager.getRoom(roomCode).getHistoryEntry(round);
+      if (!entry) throw new Error('Hand history not found');
+      callback({ entry });
+    } catch (e: unknown) {
+      callback({ error: e instanceof Error ? e.message : 'Unable to get hand history' });
+    }
   });
 
   socket.on('leave_room', () => {
@@ -86,6 +104,7 @@ io.on('connection', (socket: AppSocket) => {
         try { broadcastRoomState(roomCode); } catch { /* room gone */ }
       };
       const gameState = room.getStateFor(playerId);
+      room.acknowledgeSnapshot(playerId);
       callback({ roomCode, playerId, gameState });
       broadcastRoomState(roomCode);
     } catch (e: any) {
@@ -105,6 +124,7 @@ io.on('connection', (socket: AppSocket) => {
         };
       }
       const gameState = room.getStateFor(playerId);
+      room.acknowledgeSnapshot(playerId);
       callback({ playerId, gameState });
       broadcastRoomState(roomCode);
     } catch (e: any) {

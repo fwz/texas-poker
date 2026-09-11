@@ -93,6 +93,28 @@ export interface PublicGameState {
   winners?: { playerId: string; amount: number; handName: string; bestCards?: Card[] }[];
   turnDeadline?: number;
   history: HandHistoryEntry[];
+  /** Monotonically increasing room-state revision, used to apply patches safely. */
+  revision: number;
+}
+
+export interface PublicPlayerDelta {
+  id: string;
+  changes: Partial<PublicPlayer>;
+}
+
+/**
+ * A recipient-specific incremental update.  `history` is intentionally absent:
+ * complete hands are requested separately after showdown.
+ */
+export interface GameStatePatch {
+  baseRevision: number | null;
+  revision: number;
+  changes: Partial<Omit<PublicGameState, 'players' | 'history' | 'revision'>> & {
+    players?: {
+      upserts: PublicPlayerDelta[];
+      removedIds: string[];
+    };
+  };
 }
 
 export interface RoomOptions {
@@ -123,10 +145,15 @@ export interface ClientToServerEvents {
   ) => void;
   ready: () => void;
   use_delay_card: (callback: (res: { ok: boolean } | { error: string }) => void) => void;
+  get_game_state: (callback: (state: PublicGameState | { error: string }) => void) => void;
+  get_hand_history: (
+    payload: { round: number },
+    callback: (res: { entry: HandHistoryEntry } | { error: string }) => void
+  ) => void;
 }
 
 export interface ServerToClientEvents {
-  game_state_update: (state: PublicGameState) => void;
+  game_state_update: (patch: GameStatePatch) => void;
   action_error: (payload: { message: string }) => void;
   player_disconnected: (payload: { playerId: string }) => void;
   player_reconnected: (payload: { playerId: string }) => void;

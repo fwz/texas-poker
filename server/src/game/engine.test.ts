@@ -86,6 +86,16 @@ describe('startRound', () => {
     const s = startedEngine();
     expect(s.pot).toBe(30); // SB 10 + BB 20
   });
+
+  it('uses the button as the small blind and first preflop actor heads-up', () => {
+    const s = startedEngine(2);
+    const dealer = s.players.find(player => player.isActive && player.seatIndex === s.dealerIndex)!;
+    const bigBlind = s.players.find(player => player.bet === s.bigBlind)!;
+
+    expect(dealer.bet).toBe(s.smallBlind);
+    expect(dealer.id).not.toBe(bigBlind.id);
+    expect(s.players[s.activePlayerIndex].id).toBe(dealer.id);
+  });
 });
 
 describe('applyAction – fold', () => {
@@ -177,6 +187,15 @@ describe('applyAction – raise', () => {
     expect(() => applyAction(s, active.id, { type: 'raise', amount: 30 })).toThrow();
   });
 
+  it('rejects non-finite and over-stack raise amounts before mutating state', () => {
+    const s = startedEngine(2, 100);
+    const active = s.players[s.activePlayerIndex];
+
+    expect(() => applyAction(s, active.id, { type: 'raise', amount: Infinity })).toThrow('positive whole number');
+    expect(() => applyAction(s, active.id, { type: 'raise', amount: active.chips + active.bet + 1 })).toThrow('exceeds available chips');
+    expect(s.currentBet).toBe(20);
+  });
+
   it('re-opens action for other players', () => {
     const s = startedEngine(3);
     const active = s.players[s.activePlayerIndex];
@@ -206,6 +225,24 @@ describe('phase transitions', () => {
     const s = fullBettingRound(startedEngine(2));
     expect(s.phase).toBe('flop');
     expect(s.communityCards).toHaveLength(3);
+  });
+
+  it('starts postflop action with the first active seat left of the button', () => {
+    let s = fullBettingRound(startedEngine(3));
+    const firstLeftOfButton = () => [1, 2, 3]
+      .map(offset => (s.dealerIndex + offset) % s.players.length)
+      .find(index => s.players[index].isActive && !s.players[index].isAllIn);
+
+    expect(s.phase).toBe('flop');
+    expect(s.activePlayerIndex).toBe(firstLeftOfButton());
+
+    s = fullBettingRound(s);
+    expect(s.phase).toBe('turn');
+    expect(s.activePlayerIndex).toBe(firstLeftOfButton());
+
+    s = fullBettingRound(s);
+    expect(s.phase).toBe('river');
+    expect(s.activePlayerIndex).toBe(firstLeftOfButton());
   });
 
   it('advances from flop to turn', () => {
@@ -284,12 +321,59 @@ describe('all-in auto-runout', () => {
     if (s.phase !== 'showdown') {
       const active = s.players[s.activePlayerIndex];
       if (active.isActive && !active.isAllIn) {
-        s = applyAction(s, active.id, { type: 'raise', amount: active.chips + active.bet });
+        s = applyAction(s, active.id, { type: 'call' });
       }
     }
     // After the all-in, board should auto-run to showdown
     expect(s.phase).toBe('showdown');
     expect(s.communityCards).toHaveLength(5);
+  });
+});
+
+describe('side pots', () => {
+  it('awards the main pot and side pot to independently eligible winners', () => {
+    let s = createEngine(10, 20);
+    s = addPlayer(s, 'p1', 'Alice', '🐱', 50);
+    s = addPlayer(s, 'p2', 'Bob', '🐶', 100);
+    s = addPlayer(s, 'p3', 'Carol', '🐭', 100);
+    s = startRound(s);
+
+    // Force p1 to win the 50-chip main-pot tier with a wheel, while p2 wins
+    // the 100-chip side pot with three kings.
+    s = {
+      ...s,
+      players: s.players.map(player => ({
+        ...player,
+        holeCards: player.id === 'p1'
+          ? [{ rank: 'A', suit: 'spades' }, { rank: '2', suit: 'clubs' }]
+          : player.id === 'p2'
+          ? [{ rank: 'K', suit: 'clubs' }, { rank: 'K', suit: 'spades' }]
+          : [{ rank: 'J', suit: 'clubs' }, { rank: '10', suit: 'clubs' }],
+      })),
+      // pop order: burn, 3♥ 4♦ 5♣, burn, K♥, burn, Q♦
+      deck: [
+        { rank: 'Q', suit: 'diamonds' }, { rank: '2', suit: 'hearts' },
+        { rank: 'K', suit: 'hearts' }, { rank: '3', suit: 'spades' },
+        { rank: '5', suit: 'clubs' }, { rank: '4', suit: 'diamonds' },
+        { rank: '3', suit: 'hearts' }, { rank: '6', suit: 'spades' },
+      ],
+    };
+
+    // UTG (p2) jams, SB (p3) calls, and short BB (p1) calls all-in.
+    s = applyAction(s, s.players[s.activePlayerIndex].id, { type: 'raise', amount: 100 });
+    s = applyAction(s, s.players[s.activePlayerIndex].id, { type: 'call' });
+    s = applyAction(s, s.players[s.activePlayerIndex].id, { type: 'call' });
+
+    expect(s.phase).toBe('showdown');
+    expect(s.sidePots).toEqual([
+      { amount: 150, eligiblePlayerIds: ['p1', 'p2', 'p3'] },
+      { amount: 100, eligiblePlayerIds: ['p2', 'p3'] },
+    ]);
+    expect(s.winners).toEqual(expect.arrayContaining([
+      expect.objectContaining({ playerId: 'p1', amount: 150 }),
+      expect.objectContaining({ playerId: 'p2', amount: 100 }),
+    ]));
+    expect(s.winners!.reduce((sum, winner) => sum + winner.amount, 0)).toBe(250);
   });
 });
 

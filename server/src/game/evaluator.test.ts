@@ -52,6 +52,14 @@ describe('evaluateHand', () => {
     expect(result.name.toLowerCase()).toMatch(/straight/);
   });
 
+  it('recognizes A-2-3-4-5 as a five-high straight (the wheel)', () => {
+    const hole = [c('A', 'spades'), c('2', 'clubs')];
+    const board = [c('3', 'hearts'), c('4', 'diamonds'), c('5', 'clubs'), c('K', 'spades'), c('Q', 'hearts')];
+    const result = evaluateHand(hole, board);
+
+    expect(result.name.toLowerCase()).toMatch(/straight/);
+  });
+
   it('identifies three of a kind', () => {
     const hole = [c('5','clubs'), c('5','diamonds')];
     const board = [c('5','hearts'), c('2','spades'), c('K','clubs'), c('3','hearts'), c('J','spades')];
@@ -106,6 +114,17 @@ describe('pickWinners', () => {
     expect(winners.length).toBeGreaterThanOrEqual(1);
     // Both should tie (the board is a royal flush for both)
     expect(winners.map(w => w.playerId).sort()).toEqual(['p1','p2']);
+  });
+
+  it('ranks a six-high straight above an A-2-3-4-5 wheel', () => {
+    const board = [c('2', 'hearts'), c('3', 'diamonds'), c('4', 'clubs'), c('5', 'spades'), c('K', 'hearts')];
+    const winners = pickWinners([
+      { playerId: 'wheel', holeCards: [c('A', 'spades'), c('Q', 'clubs')] },
+      { playerId: 'sixHigh', holeCards: [c('6', 'hearts'), c('J', 'clubs')] },
+    ], board);
+
+    expect(winners).toHaveLength(1);
+    expect(winners[0].playerId).toBe('sixHigh');
   });
 
   it('includes bestCards in the winner result', () => {
